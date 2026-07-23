@@ -1,0 +1,1013 @@
+# Sanitized dashboard example.
+# Replace placeholder valve, weather, history, battery, and fault entities before use.
+# The layout uses only standard Home Assistant cards; card_mod is optional styling.
+
+views:
+  - title: Irrigation
+    path: irrigation
+    icon: mdi:sprinkler-variant
+    panel: true
+    cards:
+      - type: vertical-stack
+        cards:
+          - type: vertical-stack
+            visibility:
+              - condition: screen
+                media_query: '(min-width: 768px)'
+            cards:
+              - type: markdown
+                content: >
+                  ### {% if
+                  is_state('input_boolean.irrigation_master_enable','on') and
+                  is_state('input_boolean.irrigation_manual_lockout','off') and
+                  is_state('input_boolean.irrigation_weather_skip','off') and
+                  is_state('binary_sensor.irrigation_weather_allows_watering','on')
+                  %}✅ Auto watering can run{% else %}⛔ Auto watering blocked{%
+                  endif %}
+
+                  **Why:** {% if
+                  is_state('input_boolean.irrigation_master_enable','off')
+                  %}Master enable is off.{% elif
+                  is_state('input_boolean.irrigation_manual_lockout','on')
+                  %}Manual lockout is on.{% elif
+                  is_state('input_boolean.irrigation_weather_skip','on')
+                  %}Weather skip is active.{% elif
+                  is_state('binary_sensor.irrigation_weather_allows_watering','off')
+                  %}Weather does not allow watering.{% else %}Nothing is
+                  blocking automatic watering.{% endif %}
+
+                  **Weather:** {{ states('weather.home') |
+                  replace('_',' ') | title }} · High {{
+                  states('input_number.irrigation_forecast_high_temp') }}° ·
+                  Rain {{
+                  states('input_number.irrigation_forecast_precipitation') }} ·
+                  **Heat:** {% if
+                  is_state('binary_sensor.irrigation_hot_day','on') %}Hot day{%
+                  else %}Not a hot day{% endif %} / {% if
+                  is_state('input_boolean.irrigation_heat_boost_enable','on')
+                  %}boost enabled{% else %}boost disabled{% endif %}
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-radius: 12px;
+                    }
+                    ha-markdown {
+                      padding: 10px 16px !important;
+                    }
+                    ha-markdown h3 {
+                      margin: 0 0 6px 0 !important;
+                    }
+                    ha-markdown p {
+                      margin: 3px 0 !important;
+                      line-height: 1.3;
+                    }
+              - type: grid
+                title: Irrigation Overview
+                columns: 3
+                square: false
+                cards:
+                  - type: entities
+                    title: Control / Weather
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: input_boolean.irrigation_master_enable
+                        name: Enabled
+                      - entity: input_boolean.irrigation_manual_lockout
+                        name: Lockout
+                      - entity: input_boolean.irrigation_weather_skip
+                        name: Weather Skip
+                      - entity: input_boolean.irrigation_heat_boost_enable
+                        name: Heat Boost
+                      - type: divider
+                      - entity: weather.home
+                        name: Weather
+                      - entity: input_number.irrigation_forecast_high_temp
+                        name: Forecast High
+                      - entity: input_number.irrigation_forecast_precipitation
+                        name: Forecast Rain
+                      - entity: binary_sensor.irrigation_hot_day
+                        name: Hot Day
+                      - entity: binary_sensor.irrigation_rain_likely
+                        name: Rain Likely
+                      - entity: binary_sensor.irrigation_weather_allows_watering
+                        name: Weather Allows Watering
+                  - type: entities
+                    title: Schedule
+                    show_header_toggle: false
+                    entities:
+                      - entity: input_datetime.irrigation_lawn_start_time
+                        name: Lawn Start
+                      - entity: input_datetime.irrigation_micro_start_time
+                        name: Plant Start
+                      - entity: input_datetime.irrigation_heat_boost_time
+                        name: Heat Boost
+                  - type: entities
+                    title: Recency
+                    show_header_toggle: false
+                    entities:
+                      - type: section
+                        label: Lawn
+                      - entity: sensor.lawn_zone_1_history
+                        name: Lawn Zone 1
+                      - entity: sensor.lawn_zone_2_history
+                        name: Lawn Zone 2
+                      - entity: sensor.lawn_zone_3_history
+                        name: Lawn Zone 3
+                      - type: section
+                        label: Plants
+                      - entity: sensor.plant_zone_2_history
+                        name: Plant Zone 2
+                      - entity: sensor.plant_zone_3_history
+                        name: Plant Zone 3
+                      - entity: sensor.plant_zone_1_history
+                        name: Plant Zone 1
+                      - entity: sensor.plant_zone_4_history
+                        name: Plant Zone 4
+              - type: grid
+                title: Schedule / Plant Catch-Up
+                columns: 3
+                square: false
+                cards:
+                  - type: markdown
+                    content: >
+                      ### Next scheduled runs
+
+                      **Lawn:** {{ states('sensor.irrigation_lawn_next_scheduled_run') }}<br>
+                      _Days: {{ state_attr('sensor.irrigation_lawn_next_scheduled_run','schedule_days') }}_
+
+                      **Plants:** {{ states('sensor.irrigation_plant_next_scheduled_run') }}<br>
+                      _Days: {{ state_attr('sensor.irrigation_plant_next_scheduled_run','schedule_days') }}_
+
+                      **Heat boost:** {{ states('sensor.irrigation_heat_boost_next_check') }}<br>
+                      _{{ state_attr('sensor.irrigation_heat_boost_next_check','schedule_days') }}_
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-radius: 12px;
+                        }
+                        ha-markdown {
+                          padding: 10px 16px !important;
+                        }
+                        ha-markdown h3 {
+                          margin: 0 0 6px 0 !important;
+                        }
+                        ha-markdown p {
+                          margin: 3px 0 !important;
+                          line-height: 1.3;
+                        }
+                  - type: entities
+                    title: Rain Forecast Check
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: sensor.irrigation_forecast_rain_remaining_today
+                        name: Forecast Rain Left Today
+                      - entity: input_number.irrigation_micro_catchup_rain_threshold
+                        name: Plant Catch-up Threshold
+                      - entity: binary_sensor.irrigation_rain_likely
+                        name: Rain Likely
+                      - entity: binary_sensor.irrigation_weather_allows_watering
+                        name: Weather Allows Watering
+                      - entity: input_boolean.irrigation_weather_skip
+                        name: Weather Skip
+                  - type: entities
+                    title: Catch-Up
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: sensor.irrigation_catchup_status
+                        name: Status
+                      - entity: input_boolean.irrigation_catchup_enable
+                        name: Catch-up Enabled
+                      - entity: input_boolean.irrigation_micro_catchup_enable
+                        name: Plant Auto Catch-up
+                      - type: divider
+                      - entity: input_boolean.irrigation_micro_skipped_today
+                        name: Plants Skipped Today
+                      - entity: input_boolean.irrigation_lawn_skipped_today
+                        name: Lawn Skipped Today
+                      - entity: input_datetime.irrigation_micro_last_skipped
+                        name: Plants Last Skipped
+                      - entity: input_datetime.irrigation_micro_last_catchup
+                        name: Plant Last Catch-up
+              - type: entity-filter
+                show_empty: false
+                entities:
+                  - entity: valve.lawn_zone_1
+                    name: Lawn Zone 1
+                    secondary_info: last-changed
+                  - entity: valve.lawn_zone_2
+                    name: Lawn Zone 2
+                    secondary_info: last-changed
+                  - entity: valve.lawn_zone_3
+                    name: Lawn Zone 3
+                    secondary_info: last-changed
+                  - entity: >-
+                      valve.plant_zone_1
+                    name: Plant Zone 1
+                    secondary_info: last-changed
+                  - entity: >-
+                      valve.plant_zone_2
+                    name: Plant Zone 2
+                    secondary_info: last-changed
+                  - entity: >-
+                      valve.plant_zone_3
+                    name: Plant Zone 3
+                    secondary_info: last-changed
+                  - entity: valve.plant_zone_4
+                    name: Plant Zone 4
+                    secondary_info: last-changed
+                  - entity: valve.manual_mist_zone
+                    name: Manual Mist
+                    secondary_info: last-changed
+                state_filter:
+                  - open
+                  - opening
+                  - 'on'
+                card:
+                  type: entities
+                  title: Running Now
+                  show_header_toggle: false
+                  state_color: true
+              - type: grid
+                title: Quick Actions
+                columns: 6
+                square: false
+                cards:
+                  - type: button
+                    name: Stop All
+                    icon: mdi:stop-circle
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_stop_all_zones
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 120px;
+                        }
+                  - type: button
+                    name: Update Weather
+                    icon: mdi:weather-partly-rainy
+                    tap_action:
+                      action: call-service
+                      service: automation.trigger
+                      target:
+                        entity_id: automation.irrigation_update_weather_flags
+                      data:
+                        skip_condition: true
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 120px;
+                        }
+                  - type: button
+                    name: Lawn Cycle
+                    icon: mdi:grass
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_lawn_cycle
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 120px;
+                        }
+                  - type: button
+                    name: Plant Cycle
+                    icon: mdi:flower
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_micro_cycle
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 120px;
+                        }
+                  - type: button
+                    name: Hot Boost
+                    icon: mdi:thermometer-plus
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_hot_day_boost
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 120px;
+                        }
+                  - type: button
+                    name: Manual Mist
+                    icon: mdi:weather-fog
+                    tap_action:
+                      action: call-service
+                      service: input_boolean.turn_on
+                      target:
+                        entity_id: input_boolean.irrigation_manual_mist_enable
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 120px;
+                        }
+              - type: grid
+                title: Manual Watering - Ignores Weather Skip
+                columns: 4
+                square: false
+                cards:
+                  - type: button
+                    name: Plant 2 · 12m
+                    icon: mdi:carrot
+                    show_state: false
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_zone_ignore_weather
+                      data:
+                        zone_entity: >-
+                          valve.plant_zone_2
+                        minutes: 12
+                  - type: button
+                    name: Plant 3 · 6m
+                    icon: mdi:flower
+                    show_state: false
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_zone_ignore_weather
+                      data:
+                        zone_entity: >-
+                          valve.plant_zone_3
+                        minutes: 6
+                  - type: button
+                    name: Plant 4 · 5m
+                    icon: mdi:flower-tulip
+                    show_state: false
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_zone_ignore_weather
+                      data:
+                        zone_entity: valve.plant_zone_4
+                        minutes: 5
+                  - type: button
+                    name: Plant 1 · 5m
+                    icon: mdi:flower-pollen
+                    show_state: false
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_zone_ignore_weather
+                      data:
+                        zone_entity: >-
+                          valve.plant_zone_1
+                        minutes: 5
+              - type: grid
+                title: Lawn Zones
+                columns: 3
+                square: false
+                cards:
+                  - type: entities
+                    title: Lawn Zone 1
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.lawn_zone_1
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.lawn_zone_1_runtime
+                        name: Runtime
+                      - entity: sensor.lawn_zone_1_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_lawn_zone_1
+                        name: Run Zone
+                  - type: entities
+                    title: Lawn Zone 2
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.lawn_zone_2
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.lawn_zone_2_runtime
+                        name: Runtime
+                      - entity: sensor.lawn_zone_2_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_lawn_zone_2
+                        name: Run Zone
+                  - type: entities
+                    title: Lawn Zone 3
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.lawn_zone_3
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.lawn_zone_3_runtime
+                        name: Runtime
+                      - entity: sensor.lawn_zone_3_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_lawn_zone_3
+                        name: Run Zone
+              - type: grid
+                title: Plant Zones
+                columns: 4
+                square: false
+                cards:
+                  - type: entities
+                    title: Plant Zone 1
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: >-
+                          valve.plant_zone_1
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.plant_zone_1_runtime
+                        name: Runtime
+                      - entity: sensor.plant_zone_1_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_plant_zone_1
+                        name: Run Zone
+                  - type: entities
+                    title: Plant Zone 2
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: >-
+                          valve.plant_zone_2
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.plant_zone_2_runtime
+                        name: Runtime
+                      - entity: sensor.plant_zone_2_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_plant_zone_2
+                        name: Run Zone
+                  - type: entities
+                    title: Plant Zone 3
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: >-
+                          valve.plant_zone_3
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.plant_zone_3_runtime
+                        name: Runtime
+                      - entity: sensor.plant_zone_3_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_plant_zone_3
+                        name: Run Zone
+                  - type: entities
+                    title: Plant Zone 4
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.plant_zone_4
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.plant_zone_4_runtime
+                        name: Runtime
+                      - entity: sensor.plant_zone_4_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_plant_zone_4
+                        name: Run Zone
+              - type: grid
+                title: Manual / Diagnostics
+                columns: 3
+                square: false
+                cards:
+                  - type: entities
+                    title: Manual Mist
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.manual_mist_zone
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.manual_mist_runtime
+                        name: Runtime
+                      - entity: input_boolean.irrigation_manual_mist_enable
+                        name: Run Mister
+                      - entity: sensor.manual_mist_zone_history
+                        name: Last Used
+                  - type: entities
+                    title: Timer Batteries
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: sensor.irrigation_controller_1_battery
+                        name: Controller 1
+                      - entity: sensor.irrigation_controller_2_battery
+                        name: Controller 2
+                      - entity: sensor.irrigation_controller_3_battery
+                        name: Controller 3
+                      - entity: sensor.irrigation_controller_4_battery
+                        name: Controller 4
+                  - type: entities
+                    title: Timer Faults
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: binary_sensor.irrigation_controller_1_fault
+                        name: Controller 1
+                      - entity: binary_sensor.irrigation_controller_2_fault
+                        name: Controller 2
+                      - entity: binary_sensor.irrigation_controller_3_fault
+                        name: Controller 3
+                      - entity: binary_sensor.irrigation_controller_4_fault
+                        name: Controller 4
+          - type: vertical-stack
+            visibility:
+              - condition: screen
+                media_query: '(max-width: 767px)'
+            cards:
+              - type: markdown
+                content: >
+                  ### {% if
+                  is_state('input_boolean.irrigation_master_enable','on') and
+                  is_state('input_boolean.irrigation_manual_lockout','off') and
+                  is_state('input_boolean.irrigation_weather_skip','off') and
+                  is_state('binary_sensor.irrigation_weather_allows_watering','on')
+                  %}✅ Auto watering can run{% else %}⛔ Auto watering blocked{%
+                  endif %}
+
+                  **Why:** {% if
+                  is_state('input_boolean.irrigation_master_enable','off')
+                  %}Master enable is off.{% elif
+                  is_state('input_boolean.irrigation_manual_lockout','on')
+                  %}Manual lockout is on.{% elif
+                  is_state('input_boolean.irrigation_weather_skip','on')
+                  %}Weather skip is active.{% elif
+                  is_state('binary_sensor.irrigation_weather_allows_watering','off')
+                  %}Weather does not allow watering.{% else %}Nothing is
+                  blocking automatic watering.{% endif %}
+
+                  **Weather:** {{ states('weather.home') |
+                  replace('_',' ') | title }} · High {{
+                  states('input_number.irrigation_forecast_high_temp') }}° ·
+                  Rain {{
+                  states('input_number.irrigation_forecast_precipitation') }} ·
+                  **Heat:** {% if
+                  is_state('binary_sensor.irrigation_hot_day','on') %}Hot day{%
+                  else %}Not a hot day{% endif %} / {% if
+                  is_state('input_boolean.irrigation_heat_boost_enable','on')
+                  %}boost enabled{% else %}boost disabled{% endif %}
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-radius: 12px;
+                    }
+                    ha-markdown {
+                      padding: 10px 16px !important;
+                    }
+                    ha-markdown h3 {
+                      margin: 0 0 6px 0 !important;
+                    }
+                    ha-markdown p {
+                      margin: 3px 0 !important;
+                      line-height: 1.3;
+                    }
+              - type: entity-filter
+                show_empty: false
+                entities:
+                  - entity: valve.lawn_zone_1
+                    name: Lawn Zone 1
+                    secondary_info: last-changed
+                  - entity: valve.lawn_zone_2
+                    name: Lawn Zone 2
+                    secondary_info: last-changed
+                  - entity: valve.lawn_zone_3
+                    name: Lawn Zone 3
+                    secondary_info: last-changed
+                  - entity: >-
+                      valve.plant_zone_1
+                    name: Plant Zone 1
+                    secondary_info: last-changed
+                  - entity: >-
+                      valve.plant_zone_2
+                    name: Plant Zone 2
+                    secondary_info: last-changed
+                  - entity: >-
+                      valve.plant_zone_3
+                    name: Plant Zone 3
+                    secondary_info: last-changed
+                  - entity: valve.plant_zone_4
+                    name: Plant Zone 4
+                    secondary_info: last-changed
+                  - entity: valve.manual_mist_zone
+                    name: Manual Mist
+                    secondary_info: last-changed
+                state_filter:
+                  - open
+                  - opening
+                  - 'on'
+                card:
+                  type: entities
+                  title: Running Now
+                  show_header_toggle: false
+                  state_color: true
+              - type: entities
+                title: Control / Weather
+                show_header_toggle: false
+                state_color: true
+                entities:
+                  - entity: input_boolean.irrigation_master_enable
+                    name: Enabled
+                  - entity: input_boolean.irrigation_manual_lockout
+                    name: Lockout
+                  - entity: input_boolean.irrigation_weather_skip
+                    name: Weather Skip
+                  - entity: input_boolean.irrigation_heat_boost_enable
+                    name: Heat Boost
+                  - type: divider
+                  - entity: weather.home
+                    name: Weather
+                  - entity: input_number.irrigation_forecast_high_temp
+                    name: Forecast High
+                  - entity: input_number.irrigation_forecast_precipitation
+                    name: Forecast Rain
+                  - entity: binary_sensor.irrigation_hot_day
+                    name: Hot Day
+                  - entity: binary_sensor.irrigation_rain_likely
+                    name: Rain Likely
+                  - entity: binary_sensor.irrigation_weather_allows_watering
+                    name: Weather Allows Watering
+              - type: entities
+                title: Schedule
+                show_header_toggle: false
+                entities:
+                  - entity: input_datetime.irrigation_lawn_start_time
+                    name: Lawn Start
+                  - entity: input_datetime.irrigation_micro_start_time
+                    name: Plant Start
+                  - entity: input_datetime.irrigation_heat_boost_time
+                    name: Heat Boost
+              - type: markdown
+                content: >
+                  ### Next scheduled runs
+
+                  **Lawn:** {{ states('sensor.irrigation_lawn_next_scheduled_run') }}<br>
+                  _Days: {{ state_attr('sensor.irrigation_lawn_next_scheduled_run','schedule_days') }}_
+
+                  **Plants:** {{ states('sensor.irrigation_plant_next_scheduled_run') }}<br>
+                  _Days: {{ state_attr('sensor.irrigation_plant_next_scheduled_run','schedule_days') }}_
+
+                  **Heat boost:** {{ states('sensor.irrigation_heat_boost_next_check') }}<br>
+                  _{{ state_attr('sensor.irrigation_heat_boost_next_check','schedule_days') }}_
+
+                  **Catch-up:** {{ states('sensor.irrigation_catchup_status') }}<br>
+                  **Forecast rain left today:** {{ states('sensor.irrigation_forecast_rain_remaining_today') }} in
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-radius: 12px;
+                    }
+                    ha-markdown {
+                      padding: 10px 16px !important;
+                    }
+                    ha-markdown h3 {
+                      margin: 0 0 6px 0 !important;
+                    }
+                    ha-markdown p {
+                      margin: 3px 0 !important;
+                      line-height: 1.3;
+                    }
+              - type: entities
+                title: Plant Catch-Up
+                show_header_toggle: false
+                state_color: true
+                entities:
+                  - entity: sensor.irrigation_forecast_rain_remaining_today
+                    name: Forecast Rain Left Today
+                  - entity: input_number.irrigation_micro_catchup_rain_threshold
+                    name: Plant Catch-up Threshold
+                  - type: divider
+                  - entity: input_boolean.irrigation_catchup_enable
+                    name: Catch-up Enabled
+                  - entity: input_boolean.irrigation_micro_catchup_enable
+                    name: Plant Auto Catch-up
+                  - type: divider
+                  - entity: input_boolean.irrigation_micro_skipped_today
+                    name: Plants Skipped Today
+                  - entity: input_boolean.irrigation_lawn_skipped_today
+                    name: Lawn Skipped Today
+                  - entity: input_datetime.irrigation_micro_last_catchup
+                    name: Plant Last Catch-up
+              - type: entities
+                title: Recency
+                show_header_toggle: false
+                entities:
+                  - type: section
+                    label: Lawn
+                  - entity: sensor.lawn_zone_1_history
+                    name: Lawn Zone 1
+                  - entity: sensor.lawn_zone_2_history
+                    name: Lawn Zone 2
+                  - entity: sensor.lawn_zone_3_history
+                    name: Lawn Zone 3
+                  - type: section
+                    label: Plants
+                  - entity: sensor.plant_zone_2_history
+                    name: Plant Zone 2
+                  - entity: sensor.plant_zone_3_history
+                    name: Plant Zone 3
+                  - entity: sensor.plant_zone_1_history
+                    name: Plant Zone 1
+                  - entity: sensor.plant_zone_4_history
+                    name: Plant Zone 4
+              - type: grid
+                title: Quick Actions
+                columns: 2
+                square: false
+                cards:
+                  - type: button
+                    name: Stop All
+                    icon: mdi:stop-circle
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_stop_all_zones
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 115px;
+                        }
+                  - type: button
+                    name: Update Weather
+                    icon: mdi:weather-partly-rainy
+                    tap_action:
+                      action: call-service
+                      service: automation.trigger
+                      target:
+                        entity_id: automation.irrigation_update_weather_flags
+                      data:
+                        skip_condition: true
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 115px;
+                        }
+                  - type: button
+                    name: Lawn Cycle
+                    icon: mdi:grass
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_lawn_cycle
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 115px;
+                        }
+                  - type: button
+                    name: Plant Cycle
+                    icon: mdi:flower
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_micro_cycle
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 115px;
+                        }
+                  - type: button
+                    name: Hot Boost
+                    icon: mdi:thermometer-plus
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_hot_day_boost
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 115px;
+                        }
+                  - type: button
+                    name: Manual Mist
+                    icon: mdi:weather-fog
+                    tap_action:
+                      action: call-service
+                      service: input_boolean.turn_on
+                      target:
+                        entity_id: input_boolean.irrigation_manual_mist_enable
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 115px;
+                        }
+              - type: grid
+                title: Manual Watering - Ignores Weather Skip
+                columns: 2
+                square: false
+                cards:
+                  - type: button
+                    name: Plant 2 · 12m
+                    icon: mdi:carrot
+                    show_state: false
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_zone_ignore_weather
+                      data:
+                        zone_entity: >-
+                          valve.plant_zone_2
+                        minutes: 12
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 110px;
+                        }
+                  - type: button
+                    name: Plant 3 · 6m
+                    icon: mdi:flower
+                    show_state: false
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_zone_ignore_weather
+                      data:
+                        zone_entity: >-
+                          valve.plant_zone_3
+                        minutes: 6
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 110px;
+                        }
+                  - type: button
+                    name: Plant 4 · 5m
+                    icon: mdi:flower-tulip
+                    show_state: false
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_zone_ignore_weather
+                      data:
+                        zone_entity: valve.plant_zone_4
+                        minutes: 5
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 110px;
+                        }
+                  - type: button
+                    name: Plant 1 · 5m
+                    icon: mdi:flower-pollen
+                    show_state: false
+                    tap_action:
+                      action: call-service
+                      service: script.irrigation_run_zone_ignore_weather
+                      data:
+                        zone_entity: >-
+                          valve.plant_zone_1
+                        minutes: 5
+                    card_mod:
+                      style: |
+                        ha-card {
+                          height: 110px;
+                        }
+              - type: grid
+                title: Lawn Zones
+                columns: 1
+                square: false
+                cards:
+                  - type: entities
+                    title: Lawn Zone 1
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.lawn_zone_1
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.lawn_zone_1_runtime
+                        name: Runtime
+                      - entity: sensor.lawn_zone_1_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_lawn_zone_1
+                        name: Run Zone
+                  - type: entities
+                    title: Lawn Zone 2
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.lawn_zone_2
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.lawn_zone_2_runtime
+                        name: Runtime
+                      - entity: sensor.lawn_zone_2_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_lawn_zone_2
+                        name: Run Zone
+                  - type: entities
+                    title: Lawn Zone 3
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.lawn_zone_3
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.lawn_zone_3_runtime
+                        name: Runtime
+                      - entity: sensor.lawn_zone_3_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_lawn_zone_3
+                        name: Run Zone
+              - type: grid
+                title: Plant Zones
+                columns: 1
+                square: false
+                cards:
+                  - type: entities
+                    title: Plant Zone 1
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: >-
+                          valve.plant_zone_1
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.plant_zone_1_runtime
+                        name: Runtime
+                      - entity: sensor.plant_zone_1_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_plant_zone_1
+                        name: Run Zone
+                  - type: entities
+                    title: Plant Zone 2
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: >-
+                          valve.plant_zone_2
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.plant_zone_2_runtime
+                        name: Runtime
+                      - entity: sensor.plant_zone_2_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_plant_zone_2
+                        name: Run Zone
+                  - type: entities
+                    title: Plant Zone 3
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: >-
+                          valve.plant_zone_3
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.plant_zone_3_runtime
+                        name: Runtime
+                      - entity: sensor.plant_zone_3_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_plant_zone_3
+                        name: Run Zone
+                  - type: entities
+                    title: Plant Zone 4
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.plant_zone_4
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.plant_zone_4_runtime
+                        name: Runtime
+                      - entity: sensor.plant_zone_4_history
+                        name: Last Watered
+                      - entity: script.irrigation_run_plant_zone_4
+                        name: Run Zone
+              - type: grid
+                title: Manual / Diagnostics
+                columns: 1
+                square: false
+                cards:
+                  - type: entities
+                    title: Manual Mist
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: valve.manual_mist_zone
+                        name: Valve
+                        secondary_info: last-changed
+                      - entity: input_number.manual_mist_runtime
+                        name: Runtime
+                      - entity: input_boolean.irrigation_manual_mist_enable
+                        name: Run Mister
+                      - entity: sensor.manual_mist_zone_history
+                        name: Last Used
+                  - type: entities
+                    title: Timer Batteries
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: sensor.irrigation_controller_1_battery
+                        name: Controller 1
+                      - entity: sensor.irrigation_controller_2_battery
+                        name: Controller 2
+                      - entity: sensor.irrigation_controller_3_battery
+                        name: Controller 3
+                      - entity: sensor.irrigation_controller_4_battery
+                        name: Controller 4
+                  - type: entities
+                    title: Timer Faults
+                    show_header_toggle: false
+                    state_color: true
+                    entities:
+                      - entity: binary_sensor.irrigation_controller_1_fault
+                        name: Controller 1
+                      - entity: binary_sensor.irrigation_controller_2_fault
+                        name: Controller 2
+                      - entity: binary_sensor.irrigation_controller_3_fault
+                        name: Controller 3
+                      - entity: binary_sensor.irrigation_controller_4_fault
+                        name: Controller 4

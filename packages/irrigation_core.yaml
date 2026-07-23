@@ -1,0 +1,643 @@
+# Home Assistant B-hyve irrigation package (sanitized example)
+#
+# REQUIRED EDITS BEFORE USE:
+#   1. Replace weather.home with your weather entity.
+#   2. Replace every valve.* placeholder with your B-hyve zone valve entity.
+#   3. Review runtimes, schedule times, temperature thresholds, and rain units.
+#
+# Designed for Home Assistant packages loaded with:
+# homeassistant:
+#   packages: !include_dir_named packages
+
+input_boolean:
+  irrigation_master_enable:
+    name: Irrigation Master Enable
+    icon: mdi:sprinkler-variant
+    initial: true
+
+  irrigation_manual_lockout:
+    name: Irrigation Manual Lockout
+    icon: mdi:lock
+    initial: false
+
+  irrigation_weather_skip:
+    name: Irrigation Weather Skip
+    icon: mdi:weather-pouring
+    initial: false
+
+  irrigation_heat_boost_enable:
+    name: Irrigation Heat Boost Enable
+    icon: mdi:thermometer-plus
+    initial: true
+
+  irrigation_manual_mist_enable:
+    name: Manual Mist Enable
+    icon: mdi:weather-fog
+    initial: false
+
+input_number:
+  lawn_zone_1_runtime:
+    name: Lawn Zone 1 Runtime
+    min: 1
+    max: 120
+    step: 1
+    mode: box
+    unit_of_measurement: min
+    initial: 30
+
+  lawn_zone_2_runtime:
+    name: Lawn Zone 2 Runtime
+    min: 1
+    max: 120
+    step: 1
+    mode: box
+    unit_of_measurement: min
+    initial: 22
+
+  lawn_zone_3_runtime:
+    name: Lawn Zone 3 Runtime
+    min: 1
+    max: 120
+    step: 1
+    mode: box
+    unit_of_measurement: min
+    initial: 18
+
+  plant_zone_1_runtime:
+    name: Plant Zone 1 Runtime
+    min: 1
+    max: 60
+    step: 1
+    mode: box
+    unit_of_measurement: min
+    initial: 10
+
+  plant_zone_2_runtime:
+    name: Plant Zone 2 Runtime
+    min: 1
+    max: 60
+    step: 1
+    mode: box
+    unit_of_measurement: min
+    initial: 12
+
+  plant_zone_3_runtime:
+    name: Plant Zone 3 Runtime
+    min: 1
+    max: 60
+    step: 1
+    mode: box
+    unit_of_measurement: min
+    initial: 12
+
+  plant_zone_4_runtime:
+    name: Plant Zone 4 Runtime
+    min: 1
+    max: 60
+    step: 1
+    mode: box
+    unit_of_measurement: min
+    initial: 7
+
+  manual_mist_runtime:
+    name: Manual Mist Runtime
+    min: 1
+    max: 15
+    step: 1
+    mode: box
+    unit_of_measurement: min
+    initial: 3
+
+  irrigation_rain_skip_threshold:
+    name: Irrigation Rain Skip Threshold
+    icon: mdi:weather-pouring
+    min: 0
+    max: 2
+    step: 0.01
+    mode: box
+    unit_of_measurement: in
+    initial: 0.13
+
+  irrigation_hot_day_threshold:
+    name: Irrigation Hot Day Threshold
+    icon: mdi:thermometer-high
+    min: 60
+    max: 120
+    step: 1
+    mode: box
+    unit_of_measurement: °F
+    initial: 85
+
+  irrigation_very_hot_day_threshold:
+    name: Irrigation Very Hot Day Threshold
+    icon: mdi:thermometer-alert
+    min: 60
+    max: 120
+    step: 1
+    mode: box
+    unit_of_measurement: °F
+    initial: 90
+
+  irrigation_forecast_high_temp:
+    name: Irrigation Forecast High Temperature
+    icon: mdi:thermometer
+    min: -50
+    max: 150
+    step: 1
+    mode: box
+    unit_of_measurement: °F
+    initial: 0
+
+  irrigation_forecast_precipitation:
+    name: Irrigation Forecast Rain Remaining Today
+    icon: mdi:weather-rainy
+    min: 0
+    max: 10
+    step: 0.01
+    mode: box
+    unit_of_measurement: in
+    initial: 0
+
+input_datetime:
+  irrigation_lawn_start_time:
+    name: Irrigation Lawn Start Time
+    has_date: false
+    has_time: true
+    initial: "05:00:00"
+
+  irrigation_micro_start_time:
+    name: Irrigation Plant Start Time
+    has_date: false
+    has_time: true
+    initial: "06:15:00"
+
+  irrigation_heat_boost_time:
+    name: Irrigation Heat Boost Time
+    has_date: false
+    has_time: true
+    initial: "18:30:00"
+
+template:
+  # Current Home Assistant weather entities expose forecasts through
+  # weather.get_forecasts. This template sensor makes the hourly list reusable.
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/30"
+    actions:
+      - action: weather.get_forecasts
+        target:
+          entity_id: weather.home
+        data:
+          type: hourly
+        response_variable: hourly_response
+    sensor:
+      - name: Weather Forecast Hourly
+        unique_id: irrigation_weather_forecast_hourly
+        icon: mdi:weather-clock
+        state: "{{ now().isoformat() }}"
+        attributes:
+          forecast: "{{ hourly_response.get('weather.home', {}).get('forecast', []) }}"
+
+  - binary_sensor:
+      - name: Irrigation Hot Day
+        unique_id: irrigation_hot_day
+        icon: mdi:thermometer-high
+        state: >
+          {{ states('input_number.irrigation_forecast_high_temp') | float(0)
+             >= states('input_number.irrigation_hot_day_threshold') | float(85) }}
+
+      - name: Irrigation Very Hot Day
+        unique_id: irrigation_very_hot_day
+        icon: mdi:thermometer-alert
+        state: >
+          {{ states('input_number.irrigation_forecast_high_temp') | float(0)
+             >= states('input_number.irrigation_very_hot_day_threshold') | float(90) }}
+
+      - name: Irrigation Rain Likely
+        unique_id: irrigation_rain_likely
+        icon: mdi:weather-pouring
+        state: >
+          {{ states('input_number.irrigation_forecast_precipitation') | float(0)
+             >= states('input_number.irrigation_rain_skip_threshold') | float(0.13) }}
+
+      - name: Irrigation Weather Allows Watering
+        unique_id: irrigation_weather_allows_watering
+        icon: mdi:weather-sunny-alert
+        state: >
+          {{ is_state('input_boolean.irrigation_weather_skip', 'off')
+             and is_state('binary_sensor.irrigation_rain_likely', 'off') }}
+
+script:
+  irrigation_update_weather:
+    alias: Irrigation - Update Weather
+    description: Retrieve forecasts, update summary helpers, and set the weather skip flag.
+    sequence:
+      - variables:
+          daily_response: {}
+          hourly_response: {}
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.home
+        data:
+          type: daily
+        response_variable: daily_response
+      - action: weather.get_forecasts
+        continue_on_error: true
+        target:
+          entity_id: weather.home
+        data:
+          type: hourly
+        response_variable: hourly_response
+      - variables:
+          daily_forecast: "{{ daily_response.get('weather.home', {}).get('forecast', []) }}"
+          hourly_forecast: "{{ hourly_response.get('weather.home', {}).get('forecast', []) }}"
+          forecast_high: >
+            {% if daily_forecast | count > 0 %}
+              {{ daily_forecast[0].temperature | float(0) }}
+            {% else %}
+              0
+            {% endif %}
+          forecast_rain: >
+            {% set ns = namespace(total=0) %}
+            {% set today = now().date() %}
+            {% for item in hourly_forecast %}
+              {% set dt = as_datetime(item.datetime) %}
+              {% if dt is not none and dt.date() == today and dt >= now() %}
+                {% set ns.total = ns.total + (item.precipitation | float(0)) %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.total | round(2) }}
+      - if:
+          - condition: template
+            value_template: "{{ hourly_forecast | count == 0 }}"
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.irrigation_weather_skip
+          - action: script.irrigation_notify
+            data:
+              title: Irrigation weather unavailable
+              message: Hourly forecast data was unavailable, so automatic watering was blocked.
+          - stop: Hourly weather forecast unavailable
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.irrigation_forecast_high_temp
+        data:
+          value: "{{ forecast_high | float(0) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.irrigation_forecast_precipitation
+        data:
+          value: "{{ forecast_rain | float(0) }}"
+      - if:
+          - condition: template
+            value_template: >
+              {{ forecast_rain | float(0)
+                 >= states('input_number.irrigation_rain_skip_threshold') | float(0.13) }}
+        then:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.irrigation_weather_skip
+        else:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.irrigation_weather_skip
+    mode: restart
+
+  irrigation_notify:
+    alias: Irrigation - Notification
+    description: Generic notification endpoint. Replace with a mobile notify action if desired.
+    fields:
+      title:
+        description: Notification title
+        example: Irrigation update
+      message:
+        description: Notification message
+        example: Watering completed.
+    sequence:
+      - action: persistent_notification.create
+        data:
+          title: "{{ title | default('Irrigation') }}"
+          message: "{{ message | default('Irrigation update') }}"
+          notification_id: irrigation_status
+    mode: queued
+    max: 20
+
+  irrigation_run_zone:
+    alias: Irrigation - Run Zone
+    description: Run one zone while honoring master, lockout, and weather gates.
+    fields:
+      zone_entity:
+        description: B-hyve valve entity ID
+        example: valve.lawn_zone_1
+      minutes:
+        description: Runtime in minutes
+        example: 10
+    sequence:
+      - condition: state
+        entity_id: input_boolean.irrigation_master_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_manual_lockout
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.irrigation_weather_skip
+        state: "off"
+      - condition: state
+        entity_id: binary_sensor.irrigation_weather_allows_watering
+        state: "on"
+      - action: bhyve.start_watering
+        data:
+          entity_id: "{{ zone_entity }}"
+          minutes: "{{ minutes | int }}"
+      - delay:
+          minutes: "{{ minutes | int }}"
+      - action: bhyve.stop_watering
+        data:
+          entity_id: "{{ zone_entity }}"
+    mode: queued
+    max: 20
+
+  irrigation_run_zone_ignore_weather:
+    alias: Irrigation - Run Zone Ignore Weather
+    description: Manual run that ignores weather but still honors master and lockout.
+    fields:
+      zone_entity:
+        description: B-hyve valve entity ID
+        example: valve.plant_zone_1
+      minutes:
+        description: Runtime in minutes
+        example: 5
+    sequence:
+      - condition: state
+        entity_id: input_boolean.irrigation_master_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_manual_lockout
+        state: "off"
+      - action: bhyve.start_watering
+        data:
+          entity_id: "{{ zone_entity }}"
+          minutes: "{{ minutes | int }}"
+      - delay:
+          minutes: "{{ minutes | int }}"
+      - action: bhyve.stop_watering
+        data:
+          entity_id: "{{ zone_entity }}"
+    mode: queued
+    max: 20
+
+  irrigation_stop_all_zones:
+    alias: Irrigation - Stop All Zones
+    description: Cancel active irrigation scripts and stop every configured valve.
+    sequence:
+      - action: script.turn_off
+        target:
+          entity_id:
+            - script.irrigation_run_lawn_cycle
+            - script.irrigation_run_micro_cycle
+            - script.irrigation_run_hot_day_boost
+            - script.irrigation_run_manual_mist
+            - script.irrigation_run_lawn_zone_1
+            - script.irrigation_run_lawn_zone_2
+            - script.irrigation_run_lawn_zone_3
+            - script.irrigation_run_plant_zone_1
+            - script.irrigation_run_plant_zone_2
+            - script.irrigation_run_plant_zone_3
+            - script.irrigation_run_plant_zone_4
+            - script.irrigation_run_zone
+            - script.irrigation_run_zone_ignore_weather
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.irrigation_manual_mist_enable
+      - action: bhyve.stop_watering
+        data:
+          entity_id:
+            - valve.lawn_zone_1
+            - valve.lawn_zone_2
+            - valve.lawn_zone_3
+            - valve.plant_zone_1
+            - valve.plant_zone_2
+            - valve.plant_zone_3
+            - valve.plant_zone_4
+            - valve.manual_mist_zone
+    mode: restart
+
+  irrigation_run_lawn_zone_1:
+    alias: Irrigation - Run Lawn Zone 1
+    sequence:
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.lawn_zone_1
+          minutes: "{{ states('input_number.lawn_zone_1_runtime') | int(30) }}"
+
+  irrigation_run_lawn_zone_2:
+    alias: Irrigation - Run Lawn Zone 2
+    sequence:
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.lawn_zone_2
+          minutes: "{{ states('input_number.lawn_zone_2_runtime') | int(22) }}"
+
+  irrigation_run_lawn_zone_3:
+    alias: Irrigation - Run Lawn Zone 3
+    sequence:
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.lawn_zone_3
+          minutes: "{{ states('input_number.lawn_zone_3_runtime') | int(18) }}"
+
+  irrigation_run_plant_zone_1:
+    alias: Irrigation - Run Plant Zone 1
+    sequence:
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.plant_zone_1
+          minutes: "{{ states('input_number.plant_zone_1_runtime') | int(10) }}"
+
+  irrigation_run_plant_zone_2:
+    alias: Irrigation - Run Plant Zone 2
+    sequence:
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.plant_zone_2
+          minutes: "{{ states('input_number.plant_zone_2_runtime') | int(12) }}"
+
+  irrigation_run_plant_zone_3:
+    alias: Irrigation - Run Plant Zone 3
+    sequence:
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.plant_zone_3
+          minutes: "{{ states('input_number.plant_zone_3_runtime') | int(12) }}"
+
+  irrigation_run_plant_zone_4:
+    alias: Irrigation - Run Plant Zone 4
+    sequence:
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.plant_zone_4
+          minutes: "{{ states('input_number.plant_zone_4_runtime') | int(7) }}"
+
+  irrigation_run_lawn_cycle:
+    alias: Irrigation - Run Lawn Cycle
+    description: Runs all lawn zones sequentially.
+    sequence:
+      - action: script.irrigation_run_lawn_zone_1
+      - action: script.irrigation_run_lawn_zone_2
+      - action: script.irrigation_run_lawn_zone_3
+    mode: single
+
+  irrigation_run_micro_cycle:
+    alias: Irrigation - Run Plant Cycle
+    description: Runs all plant and micro-sprayer zones sequentially.
+    sequence:
+      - action: script.irrigation_run_plant_zone_1
+      - action: script.irrigation_run_plant_zone_2
+      - action: script.irrigation_run_plant_zone_3
+      - action: script.irrigation_run_plant_zone_4
+    mode: single
+
+  irrigation_run_hot_day_boost:
+    alias: Irrigation - Run Hot Day Boost
+    description: Short sequential evening boost for plant zones on hot days.
+    sequence:
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.plant_zone_2
+          minutes: 5
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.plant_zone_3
+          minutes: 4
+      - action: script.irrigation_run_zone
+        data:
+          zone_entity: valve.plant_zone_4
+          minutes: 3
+      - if:
+          - condition: state
+            entity_id: binary_sensor.irrigation_very_hot_day
+            state: "on"
+        then:
+          - action: script.irrigation_run_zone
+            data:
+              zone_entity: valve.plant_zone_1
+              minutes: 3
+    mode: single
+
+  irrigation_run_manual_mist:
+    alias: Irrigation - Run Manual Mist
+    sequence:
+      - action: script.irrigation_run_zone_ignore_weather
+        data:
+          zone_entity: valve.manual_mist_zone
+          minutes: "{{ states('input_number.manual_mist_runtime') | int(3) }}"
+    mode: single
+
+automation:
+  - id: irrigation_update_weather_flags
+    alias: Irrigation - Update Weather Flags
+    description: Refresh today's forecast high and remaining precipitation, then set weather skip.
+    triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time
+        at:
+          - "04:45:00"
+          - "12:00:00"
+          - "17:00:00"
+      - trigger: state
+        entity_id: weather.home
+    actions:
+      - action: script.irrigation_update_weather
+    mode: restart
+
+  - id: irrigation_morning_lawn_cycle
+    alias: Irrigation - Morning Lawn Cycle
+    description: Runs Monday, Wednesday, and Saturday when all gates allow it.
+    triggers:
+      - trigger: time
+        at: input_datetime.irrigation_lawn_start_time
+    conditions:
+      - condition: template
+        value_template: "{{ now().weekday() in [0, 2, 5] }}"
+      - condition: state
+        entity_id: input_boolean.irrigation_master_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_manual_lockout
+        state: "off"
+    actions:
+      - action: script.irrigation_update_weather
+      - condition: state
+        entity_id: binary_sensor.irrigation_weather_allows_watering
+        state: "on"
+      - action: script.irrigation_run_lawn_cycle
+    mode: single
+
+  - id: irrigation_morning_plant_cycle
+    alias: Irrigation - Morning Plant Cycle
+    description: Runs the plant cycle daily when all gates allow it.
+    triggers:
+      - trigger: time
+        at: input_datetime.irrigation_micro_start_time
+    conditions:
+      - condition: state
+        entity_id: input_boolean.irrigation_master_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_manual_lockout
+        state: "off"
+    actions:
+      - action: script.irrigation_update_weather
+      - condition: state
+        entity_id: binary_sensor.irrigation_weather_allows_watering
+        state: "on"
+      - action: script.irrigation_run_micro_cycle
+    mode: single
+
+  - id: irrigation_evening_heat_boost
+    alias: Irrigation - Evening Heat Boost
+    description: Runs a short plant boost on hot days when rain is not expected.
+    triggers:
+      - trigger: time
+        at: input_datetime.irrigation_heat_boost_time
+    conditions:
+      - condition: state
+        entity_id: input_boolean.irrigation_master_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_heat_boost_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_manual_lockout
+        state: "off"
+      - condition: state
+        entity_id: binary_sensor.irrigation_hot_day
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.irrigation_rain_likely
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.irrigation_weather_skip
+        state: "off"
+    actions:
+      - action: script.irrigation_run_hot_day_boost
+    mode: single
+
+  - id: irrigation_manual_mist_toggle
+    alias: Irrigation - Manual Mist Toggle
+    description: Runs the mist zone once whenever the dashboard toggle is turned on.
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.irrigation_manual_mist_enable
+        to: "on"
+    actions:
+      - action: script.irrigation_run_manual_mist
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.irrigation_manual_mist_enable
+    mode: single

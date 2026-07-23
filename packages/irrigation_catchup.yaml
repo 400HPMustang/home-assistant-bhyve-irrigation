@@ -1,0 +1,322 @@
+# Same-day weather catch-up package.
+# - Records scheduled lawn/plant cycles skipped by weather.
+# - Automatically retries only the plant cycle later the same day.
+# - Lawn catch-up remains a manual dashboard decision.
+
+input_boolean:
+  irrigation_catchup_enable:
+    name: Irrigation Catch-up Enable
+    icon: mdi:calendar-sync
+    initial: true
+
+  irrigation_micro_catchup_enable:
+    name: Plant Catch-up Enable
+    icon: mdi:flower
+    initial: true
+
+  irrigation_micro_skipped_today:
+    name: Plants Skipped Today
+    icon: mdi:flower-off
+    initial: false
+
+  irrigation_lawn_skipped_today:
+    name: Lawn Skipped Today
+    icon: mdi:grass-off
+    initial: false
+
+  irrigation_micro_catchup_ran_today:
+    name: Plant Catch-up Ran Today
+    icon: mdi:check-circle
+    initial: false
+
+input_number:
+  irrigation_micro_catchup_rain_threshold:
+    name: Plant Catch-up Forecast Rain Threshold
+    icon: mdi:weather-pouring
+    min: 0
+    max: 1
+    step: 0.01
+    mode: box
+    unit_of_measurement: in
+    initial: 0.25
+
+input_datetime:
+  irrigation_micro_last_skipped:
+    name: Plants Last Skipped
+    has_date: true
+    has_time: true
+
+  irrigation_lawn_last_skipped:
+    name: Lawn Last Skipped
+    has_date: true
+    has_time: true
+
+  irrigation_micro_last_catchup:
+    name: Plant Last Catch-up
+    has_date: true
+    has_time: true
+
+template:
+  - triggers:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/5"
+      - trigger: state
+        entity_id:
+          - sensor.weather_forecast_hourly
+          - input_datetime.irrigation_lawn_start_time
+          - input_datetime.irrigation_micro_start_time
+          - input_datetime.irrigation_heat_boost_time
+          - input_boolean.irrigation_catchup_enable
+          - input_boolean.irrigation_micro_catchup_enable
+          - input_boolean.irrigation_micro_skipped_today
+          - input_boolean.irrigation_lawn_skipped_today
+          - input_boolean.irrigation_micro_catchup_ran_today
+          - binary_sensor.irrigation_weather_allows_watering
+          - binary_sensor.irrigation_rain_likely
+          - input_boolean.irrigation_weather_skip
+          - input_number.irrigation_micro_catchup_rain_threshold
+    sensor:
+      - name: Irrigation Forecast Rain Remaining Today
+        unique_id: irrigation_forecast_rain_remaining_today
+        icon: mdi:weather-pouring
+        unit_of_measurement: in
+        state: >
+          {% set ns = namespace(total=0) %}
+          {% set today = now().date() %}
+          {% for item in state_attr('sensor.weather_forecast_hourly', 'forecast') or [] %}
+            {% set dt = as_datetime(item.datetime) %}
+            {% if dt is not none and dt.date() == today and dt > now() %}
+              {% set ns.total = ns.total + (item.precipitation | float(0)) %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.total | round(2) }}
+
+      - name: Irrigation Lawn Next Scheduled Run
+        unique_id: irrigation_lawn_next_scheduled_run
+        icon: mdi:calendar-clock
+        state: >
+          {% set t = states('input_datetime.irrigation_lawn_start_time') %}
+          {% if t in ['unknown', 'unavailable', 'none', '', None] %}
+            Unknown
+          {% else %}
+            {% set ns = namespace(next='Unknown') %}
+            {% for i in range(0, 8) %}
+              {% set dt = today_at(t) + timedelta(days=i) %}
+              {% if dt.weekday() in [0, 2, 5] and dt > now() and ns.next == 'Unknown' %}
+                {% set ns.next = dt.strftime('%a %m/%d at %I:%M %p') %}
+              {% endif %}
+            {% endfor %}
+            {{ ns.next }}
+          {% endif %}
+        attributes:
+          schedule_days: Mon / Wed / Sat
+
+      - name: Irrigation Plant Next Scheduled Run
+        unique_id: irrigation_plant_next_scheduled_run
+        icon: mdi:calendar-clock
+        state: >
+          {% set t = states('input_datetime.irrigation_micro_start_time') %}
+          {% if t in ['unknown', 'unavailable', 'none', '', None] %}
+            Unknown
+          {% else %}
+            {% set today_dt = today_at(t) %}
+            {% set next_dt = today_dt if today_dt > now() else today_dt + timedelta(days=1) %}
+            {{ next_dt.strftime('%a %m/%d at %I:%M %p') }}
+          {% endif %}
+        attributes:
+          schedule_days: Daily
+
+      - name: Irrigation Heat Boost Next Check
+        unique_id: irrigation_heat_boost_next_check
+        icon: mdi:thermometer-plus
+        state: >
+          {% set t = states('input_datetime.irrigation_heat_boost_time') %}
+          {% if t in ['unknown', 'unavailable', 'none', '', None] %}
+            Unknown
+          {% else %}
+            {% set today_dt = today_at(t) %}
+            {% set next_dt = today_dt if today_dt > now() else today_dt + timedelta(days=1) %}
+            {{ next_dt.strftime('%a %m/%d at %I:%M %p') }}
+          {% endif %}
+        attributes:
+          schedule_days: Daily if hot-day logic passes
+
+      - name: Irrigation Catchup Status
+        unique_id: irrigation_catchup_status
+        icon: mdi:calendar-sync
+        state: >
+          {% set forecast_rain = states('sensor.irrigation_forecast_rain_remaining_today') | float(0) %}
+          {% set threshold = states('input_number.irrigation_micro_catchup_rain_threshold') | float(0.25) %}
+          {% set weather_ok = is_state('binary_sensor.irrigation_weather_allows_watering', 'on')
+                              and is_state('binary_sensor.irrigation_rain_likely', 'off')
+                              and is_state('input_boolean.irrigation_weather_skip', 'off') %}
+          {% if is_state('input_boolean.irrigation_catchup_enable', 'off') %}
+            Catch-up disabled
+          {% elif is_state('input_boolean.irrigation_master_enable', 'off') %}
+            Master disabled
+          {% elif is_state('input_boolean.irrigation_manual_lockout', 'on') %}
+            Manual lockout active
+          {% elif is_state('input_boolean.irrigation_micro_skipped_today', 'on')
+                and is_state('input_boolean.irrigation_micro_catchup_enable', 'on')
+                and is_state('input_boolean.irrigation_micro_catchup_ran_today', 'off')
+                and forecast_rain < threshold
+                and weather_ok %}
+            Plant catch-up eligible
+          {% elif is_state('input_boolean.irrigation_micro_skipped_today', 'on') %}
+            Plants skipped; waiting for weather/forecast to clear
+          {% elif is_state('input_boolean.irrigation_lawn_skipped_today', 'on') %}
+            Lawn skipped today; manual decision
+          {% else %}
+            No catch-up needed
+          {% endif %}
+        attributes:
+          forecast_rain_remaining_today: "{{ states('sensor.irrigation_forecast_rain_remaining_today') }} in"
+          plant_forecast_rain_threshold: "{{ states('input_number.irrigation_micro_catchup_rain_threshold') }} in"
+          lawn_auto_catchup: disabled by design
+
+automation:
+  - id: irrigation_daily_reset_catchup_flags
+    alias: Irrigation - Reset Catch-up Flags
+    description: Reset same-day skip and catch-up flags shortly after midnight.
+    triggers:
+      - trigger: time
+        at: "00:05:00"
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.irrigation_micro_skipped_today
+            - input_boolean.irrigation_lawn_skipped_today
+            - input_boolean.irrigation_micro_catchup_ran_today
+    mode: single
+
+  - id: irrigation_mark_weather_skipped_scheduled_cycles
+    alias: Irrigation - Mark Weather-Skipped Scheduled Cycles
+    description: Mark lawn or plants skipped when scheduled weather gates block watering.
+    triggers:
+      - trigger: time
+        id: lawn
+        at: input_datetime.irrigation_lawn_start_time
+      - trigger: time
+        id: micro
+        at: input_datetime.irrigation_micro_start_time
+    conditions:
+      - condition: state
+        entity_id: input_boolean.irrigation_master_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_manual_lockout
+        state: "off"
+      - condition: template
+        value_template: "{{ trigger.id != 'lawn' or now().weekday() in [0, 2, 5] }}"
+      - condition: template
+        value_template: >
+          {{ is_state('input_boolean.irrigation_weather_skip', 'on')
+             or is_state('binary_sensor.irrigation_weather_allows_watering', 'off')
+             or is_state('binary_sensor.irrigation_rain_likely', 'on') }}
+    actions:
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: micro
+            sequence:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.irrigation_micro_skipped_today
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.irrigation_micro_last_skipped
+                data:
+                  datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+          - conditions:
+              - condition: trigger
+                id: lawn
+            sequence:
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.irrigation_lawn_skipped_today
+              - action: input_datetime.set_datetime
+                target:
+                  entity_id: input_datetime.irrigation_lawn_last_skipped
+                data:
+                  datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - action: script.irrigation_notify
+        data:
+          title: Irrigation skipped by weather
+          message: >
+            {{ 'Plant' if trigger.id == 'micro' else 'Lawn' }} cycle was skipped.
+            Forecast rain remaining today is
+            {{ states('sensor.irrigation_forecast_rain_remaining_today') }} in.
+            Plant catch-up may run later; lawn catch-up is manual.
+    mode: single
+
+  - id: irrigation_plant_catchup_after_weather_skip
+    alias: Irrigation - Plant Catch-up After Weather Skip
+    description: Run a same-day plant catch-up when the remaining rain forecast clears.
+    triggers:
+      - trigger: time_pattern
+        minutes: "/30"
+      - trigger: state
+        entity_id:
+          - binary_sensor.irrigation_weather_allows_watering
+          - binary_sensor.irrigation_rain_likely
+          - input_boolean.irrigation_weather_skip
+          - sensor.irrigation_forecast_rain_remaining_today
+    conditions:
+      - condition: time
+        after: "10:00:00"
+        before: "18:00:00"
+      - condition: state
+        entity_id: input_boolean.irrigation_catchup_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_micro_catchup_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_master_enable
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_manual_lockout
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.irrigation_weather_skip
+        state: "off"
+      - condition: state
+        entity_id: binary_sensor.irrigation_weather_allows_watering
+        state: "on"
+      - condition: state
+        entity_id: binary_sensor.irrigation_rain_likely
+        state: "off"
+      - condition: state
+        entity_id: input_boolean.irrigation_micro_skipped_today
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.irrigation_micro_catchup_ran_today
+        state: "off"
+      - condition: template
+        value_template: >
+          {{ states('sensor.irrigation_forecast_rain_remaining_today') | float(0)
+             < states('input_number.irrigation_micro_catchup_rain_threshold') | float(0.25) }}
+    actions:
+      - action: script.irrigation_notify
+        data:
+          title: Irrigation plant catch-up running
+          message: >
+            Plant watering was skipped earlier and the remaining rain forecast is
+            {{ states('sensor.irrigation_forecast_rain_remaining_today') }} in.
+            Running the plant cycle now.
+      - action: script.irrigation_run_micro_cycle
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.irrigation_micro_catchup_ran_today
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.irrigation_micro_skipped_today
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.irrigation_micro_last_catchup
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+    mode: single
