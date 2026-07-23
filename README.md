@@ -40,11 +40,31 @@ The default rain thresholds use inches and the default temperature thresholds us
 ├── dashboards
 │   └── irrigation_dashboard.yaml
 └── docs
+    ├── screenshots
+    │   ├── dashboard-desktop-manual.png
+    │   ├── dashboard-desktop-overview.png
+    │   ├── dashboard-desktop-quickactions.png
+    │   ├── dashboard-desktop-schedule.png
+    │   └── dashboard-desktop-zones.png
     ├── entity-mapping.md
     ├── mobile-notifications.md
     ├── sanitization.md
     └── validation.md
 ```
+
+## Dashboard preview
+
+### Desktop overview
+
+[![Desktop irrigation dashboard overview](docs/screenshots/dashboard-desktop-overview.png)](docs/screenshots/dashboard-desktop-overview.png)
+
+Click any screenshot to open the full-size image.
+
+| Quick actions | Zone status and controls |
+|---|---|
+| [![Dashboard quick actions](docs/screenshots/dashboard-desktop-quickactions.png)](docs/screenshots/dashboard-desktop-quickactions.png) | [![Dashboard zone status and controls](docs/screenshots/dashboard-desktop-zones.png)](docs/screenshots/dashboard-desktop-zones.png) |
+| **Schedules and runtimes** | **Manual watering** |
+| [![Dashboard schedules and runtimes](docs/screenshots/dashboard-desktop-schedule.png)](docs/screenshots/dashboard-desktop-schedule.png) | [![Dashboard manual watering controls](docs/screenshots/dashboard-desktop-manual.png)](docs/screenshots/dashboard-desktop-manual.png) |
 
 ## Installation
 
@@ -156,7 +176,7 @@ The sanitized package uses a built-in persistent notification through `script.ir
 
 ## License
 
-MIT
+No license file is included. Choose a license before publishing the repository publicly.
 
 ## References
 
