@@ -156,7 +156,7 @@ The sanitized package uses a built-in persistent notification through `script.ir
 
 ## License
 
-No license file is included. Choose a license before publishing the repository publicly.
+MIT
 
 ## References
 
